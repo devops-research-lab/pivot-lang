@@ -1,65 +1,38 @@
 name: test
 on:
-  pull_request:
-    paths:
-    - '**.rs'
-    - '**/Cargo.*'
-    - '.github/workflows/test.yml'
-    - '**.pi'
-    - '**/Kagari.*'
-    - 'codecov.yml'
-  push:
-    branches:
-      - "master"
-      - "release/*"
-      - "staging"
-      - "trying"
-    paths:
-      - '**.rs'
-      - '**/Cargo.*'
-      - '.github/workflows/test.yml'
-      - '**.pi'
-      - '**/Kagari.*'
-      - 'codecov.yml'
-
+  push: null
 env:
   RUSTFLAGS: -Dwarnings
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
   PL_IMMIX_HEAP_SIZE: 5000000
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
 jobs:
   check:
     name: Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: true
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
+    - name: Install packages
+      run: 'sudo apt-get update
 
-      - name: Install packages
-        run: |
-          sudo apt-get update
-          sudo apt-get install libasound2-dev libudev-dev
+        sudo apt-get install libasound2-dev libudev-dev
 
-      - name: Install Rust (stable)
-        uses: dsherret/rust-toolchain-file@v1
-
-      - name: Install LLVM
-        uses: Pivot-Studio/setup-llvm@main
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Cargo check
-        uses: actions-rs/cargo@v1
-        with:
-          command: check
-          args: --all-targets
-
+        '
+    - name: Install Rust (stable)
+      uses: dsherret/rust-toolchain-file@v1
+    - name: Install LLVM
+      uses: Pivot-Studio/setup-llvm@main
+    - uses: Swatinem/rust-cache@v2
+    - name: Cargo check
+      uses: actions-rs/cargo@v1
+      with:
+        command: check
+        args: --all-targets
   test:
     name: Test Rust
     runs-on: ${{ matrix.os }}
@@ -67,108 +40,89 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ["ubuntu-latest", "windows-latest", "macos-14"]
+        os:
+        - ubuntu-latest
+        - windows-latest
+        - macos-14
         include:
-          - RUSTFLAGS: "-Dwarnings"
-            CARGO_INCREMENTAL: 1
-            CARGO_TARGET_DIR: "target"
-            KAGARI_LIB_ROOT: /planglib
-            PL_ROOT: /target/debug/
-          - os: "windows-latest"
-            RUSTFLAGS: "-Dwarnings -Ctarget-feature=+crt-static"
-            CARGO_INCREMENTAL: 0
-            CARGO_TARGET_DIR: "C:\\cargo-target-dir"
-            KAGARI_LIB_ROOT: \planglib
-            PL_ROOT: \target\debug
+        - RUSTFLAGS: -Dwarnings
+          CARGO_INCREMENTAL: 1
+          CARGO_TARGET_DIR: target
+          KAGARI_LIB_ROOT: /planglib
+          PL_ROOT: /target/debug/
+        - os: windows-latest
+          RUSTFLAGS: -Dwarnings -Ctarget-feature=+crt-static
+          CARGO_INCREMENTAL: 0
+          CARGO_TARGET_DIR: C:\cargo-target-dir
+          KAGARI_LIB_ROOT: \planglib
+          PL_ROOT: \target\debug
     env:
       RUSTFLAGS: ${{ matrix.RUSTFLAGS }}
       CARGO_INCREMENTAL: ${{ matrix.CARGO_INCREMENTAL }}
-      # Disable generating debug info, we don't need it here anyway and its only using disk space
       CARGO_PROFILE_DEV_DEBUG: 0
       CARGO_TARGET_DIR: ${{ matrix.CARGO_TARGET_DIR }}
       KAGARI_LIB_ROOT: ${{ github.workspace }}${{ matrix.KAGARI_LIB_ROOT }}
       PL_ROOT: ${{ github.workspace }}${{ matrix.PL_ROOT }}
       GC_LOG: trace
     steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: true
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
+    - name: Install packages
+      if: matrix.os == 'ubuntu-latest'
+      run: 'sudo apt-get update
 
-      - name: Install packages
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          sudo apt-get update
-          sudo apt-get install libasound2-dev libudev-dev libunwind-dev
-        
-      - name: Install LLVM
-        uses: Pivot-Studio/setup-llvm@main
+        sudo apt-get install libasound2-dev libudev-dev libunwind-dev
 
-      - name: Install toolchain
-        uses: dsherret/rust-toolchain-file@v1
-
-
-      - uses: Swatinem/rust-cache@v2
-        if: ${{ matrix.os != 'self-hosted' && matrix.os != 'windows-latest' }}
-
-      - name: Install latest llvm-cov release
-        uses: taiki-e/install-action@cargo-llvm-cov
-
-      - name: Install latest nextest release
-        uses: taiki-e/install-action@nextest
-
-      - name: build vm
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --manifest-path vm/Cargo.toml --target-dir target -vv --no-default-features --features "static,immix,jitdylib"
-
-      # - name: build plc
-      #   uses: actions-rs/cargo@v1
-      #   with:
-      #     command: build
-      #     args: --manifest-path Cargo.toml --target-dir target -vv
-
-
-      - name: Test with latest nextest release
-        uses: actions-rs/cargo@v1
-        with:
-          command: llvm-cov
-          args: nextest --workspace --all-features --lcov --output-path lcov.info --profile ci -vv
-          
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4.0.1
-        with:
-          token: ${{ secrets.CODE_COV }}
-          files: lcov.info
-          name: ${{ matrix.os }}
-          fail_ci_if_error: false
-          verbose: true
+        '
+    - name: Install LLVM
+      uses: Pivot-Studio/setup-llvm@main
+    - name: Install toolchain
+      uses: dsherret/rust-toolchain-file@v1
+    - uses: Swatinem/rust-cache@v2
+      if: ${{ matrix.os != 'self-hosted' && matrix.os != 'windows-latest' }}
+    - name: Install latest llvm-cov release
+      uses: taiki-e/install-action@cargo-llvm-cov
+    - name: Install latest nextest release
+      uses: taiki-e/install-action@nextest
+    - name: build vm
+      uses: actions-rs/cargo@v1
+      with:
+        command: build
+        args: --manifest-path vm/Cargo.toml --target-dir target -vv --no-default-features --features "static,immix,jitdylib"
+    - name: Test with latest nextest release
+      uses: actions-rs/cargo@v1
+      with:
+        command: llvm-cov
+        args: nextest --workspace --all-features --lcov --output-path lcov.info --profile ci -vv
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4.0.1
+      with:
+        token: ${{ secrets.CODE_COV }}
+        files: lcov.info
+        name: ${{ matrix.os }}
+        fail_ci_if_error: false
+        verbose: true
   style:
     name: Check Style
     runs-on: ubuntu-latest
     needs: check
     steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: true
-
-      - name: Install stable toolchain
-        uses: dsherret/rust-toolchain-file@v1
-
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Run cargo fmt
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
-
-      - name: Install LLVM
-        uses: Pivot-Studio/setup-llvm@main
-
-      - name: Run cargo clippy
-        uses: actions-rs/clippy-check@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all-features
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
+    - name: Install stable toolchain
+      uses: dsherret/rust-toolchain-file@v1
+    - uses: Swatinem/rust-cache@v2
+    - name: Run cargo fmt
+      uses: actions-rs/cargo@v1
+      with:
+        command: fmt
+        args: --all -- --check
+    - name: Install LLVM
+      uses: Pivot-Studio/setup-llvm@main
+    - name: Run cargo clippy
+      uses: actions-rs/clippy-check@v1
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        args: --all-features
